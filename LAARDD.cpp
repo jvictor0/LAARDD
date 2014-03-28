@@ -36,6 +36,9 @@ public:
     arma::Mat<double> * R;
   };
   
+  // Does a single-threaded economic QR decomposition on matrix.
+  // Factorization will fail if any segment is fat.
+  //
   static QRPair SequentialQR(ShardedMatrix * matrix)
   {
     StoredMatrixID * Q_ids = new StoredMatrixID[matrix->NumSegments()];
@@ -51,6 +54,7 @@ public:
     for (int i = 0; i < matrix->NumSegments(); ++i)
     {
       matrix->WriteMatrixSegment(i, A_seg);
+      CHECK(A_seg.n_rows >= A_seg.n_cols,result);
       CHECK(qr_econ(Q_seg, *R_seg, arma::join_vert(*R_seg, A_seg)), result);
       assert(Q_seg.n_cols == matrix->NumColumns());
       if (i != matrix->NumSegments() - 1) // no need to store last Q_seg, will use immidiately
@@ -64,6 +68,12 @@ public:
     //
     result.R = R_seg;
     DiskShardedMatrix * Q = new DiskShardedMatrix(*matrix, false);
+    if (matrix->NumSegments() == 1) // trivial case, whole matrix in memory
+    {
+      Q->SetSegment(matrix->NumSegments() - 1, Q_seg);
+      result.Q = Q;
+      return result;
+    }
     Q->SetSegment(matrix->NumSegments() - 1, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
 
     // Reconstruct Q from the Q_i
@@ -105,10 +115,8 @@ uint LAARDD::s_counter = 0;
 
 int main()
 {
-  arma::mat A = arma::randu<arma::mat>(10,3);
-  InMemoryShardedMatrix matrix(A,2);
-  arma::mat Q,R;
-  qr_econ(Q,R,A);
-  std::cout << "the R = " << R << std::endl;
-  LAARDD::SequentialQRTest(& matrix);
+  if(LAARDD::SmallRandomTests(5,50))
+  {
+    std::cout << "Small Random Tests Passed" << std::endl;
+  }
 }
