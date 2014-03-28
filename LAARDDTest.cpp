@@ -36,3 +36,36 @@ static bool SmallRandomTests(int lowestN, int highestN)
   }
   return true;
 }
+
+
+static bool SmallRandomLowRankTests(int lowestN, int highestN)
+{
+  for (int n = lowestN; n < highestN; ++n)
+  {
+    for (int p = 1; p < n; ++p)
+    {
+      for (int b = 1; b <= n/p; ++b)
+      {
+	for (int r = 0; r < p; ++r)
+	{
+	  arma::mat A = arma::randu<arma::mat>(n,p);
+	  arma::mat U,V;
+	  arma::vec s;
+	  arma::svd_econ(U,s,V,A);
+	  for (int i = 0; i < r; ++i)
+	  {
+	    s(s.size() - 1 - i) = 0;
+	  }
+	  A = U * arma::diagmat(s) * V.t();
+	  InMemoryShardedMatrix matrix(A,b);
+	  if (!LAARDD::SequentialQRTest(& matrix))
+	  {
+	    std::cout << "FAILED n = " << n << " p = " << p << " b = " << b << std::endl;
+	    return false;
+	  }
+	}
+      }
+    }
+  }
+  return true;
+}

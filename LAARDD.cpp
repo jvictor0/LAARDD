@@ -64,6 +64,7 @@ public:
     //
     result.R = R_seg;
     DiskShardedMatrix * Q = new DiskShardedMatrix(*matrix, false);
+
     // Reconstruct Q from the Q_i
     //
     arma::mat next_Q_seg;
@@ -83,7 +84,6 @@ public:
   }
   
 #include "LAARDDTest.cpp"
-
   
 private:
 
@@ -101,5 +101,9 @@ int main()
   if(LAARDD::SmallRandomTests(5,30))
   {
     std::cout << "SmallRandomTests Passed" << std::endl;
+  }
+  if(LAARDD::SmallRandomLowRankTests(5,30))
+  {
+    std::cout << "SmallRandomLowRankTests Passed" << std::endl;
   }
 }
