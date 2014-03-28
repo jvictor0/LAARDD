@@ -26,7 +26,7 @@ public:
 
   static bool Delete(StoredMatrixID id)
   {
-    return std::remove(("tmp/__LAARDD_TEMPORARY_" + std::to_string(id) + ".mat").c_str());
+    return std::remove(("tmp/__LAARDD_TEMPORARY_" + std::to_string(id) + ".mat").c_str()) == 0;
   }
 
 
@@ -36,9 +36,6 @@ public:
     arma::Mat<double> * R;
   };
   
-  // Does a single-threaded economic QR decomposition on matrix.
-  // Factorization will fail if any segment is fat.
-  //
   static QRPair SequentialQR(ShardedMatrix * matrix)
   {
     StoredMatrixID * Q_ids = new StoredMatrixID[matrix->NumSegments()];
@@ -48,13 +45,12 @@ public:
     QRPair result;
     result.Q = NULL;
     result.R = NULL;
-
+    
     // factor [R_{i-1}; A_i], store the Q_i factors for later
     //
     for (int i = 0; i < matrix->NumSegments(); ++i)
     {
       matrix->WriteMatrixSegment(i, A_seg);
-      CHECK(A_seg.n_rows >= A_seg.n_cols,result);
       CHECK(qr_econ(Q_seg, *R_seg, arma::join_vert(*R_seg, A_seg)), result);
       assert(Q_seg.n_cols == matrix->NumColumns());
       if (i != matrix->NumSegments() - 1) // no need to store last Q_seg, will use immidiately
@@ -63,37 +59,30 @@ public:
 	assert(Q_ids[i] != -1);
       }
     }
-
+    
     // R_{s-1} is now the final R result of the QR factorization.
     //
     result.R = R_seg;
     DiskShardedMatrix * Q = new DiskShardedMatrix(*matrix, false);
-    if (matrix->NumSegments() == 1) // trivial case, whole matrix in memory
-    {
-      Q->SetSegment(matrix->NumSegments() - 1, Q_seg);
-      result.Q = Q;
-      return result;
-    }
+<<<<<<< HEAD
+    
+=======
     Q->SetSegment(matrix->NumSegments() - 1, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
 
+>>>>>>> parent of 5806df2... Little fixes with ShardedMatrix interface, and better test for random matrices.
     // Reconstruct Q from the Q_i
     //
     arma::mat next_Q_seg;
-    for (int i = matrix->NumSegments() - 2; i >= 0; --i)
+    for (int i = matrix->NumSegments() - 1; i >= 1; --i)
     {
-      bool ret_worked = Retrieve(Q_ids[i],next_Q_seg);
+      Q->SetSegment(i, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
+      bool ret_worked = Retrieve(Q_ids[i-1],next_Q_seg);
       assert(ret_worked);
-      assert(Delete(Q_ids[i]) == 0);
+      assert(Delete(Q_ids[i-1]));
       Q_seg = next_Q_seg * Q_seg.rows(0, matrix->NumColumns() - 1);
-      if (i == 0)
-      {
-	Q->SetSegment(i, Q_seg);
-      }
-      else
-      {
-	Q->SetSegment(i, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
-      }
     }
+    
+    Q->SetSegment(0, Q_seg); // last segment uses entire Q_seg matrix
     
     result.Q = Q;
     return result;
@@ -115,8 +104,10 @@ uint LAARDD::s_counter = 0;
 
 int main()
 {
-  if(LAARDD::SmallRandomTests(5,50))
-  {
-    std::cout << "Small Random Tests Passed" << std::endl;
-  }
+  arma::mat A = arma::randu<arma::mat>(10,3);
+  InMemoryShardedMatrix matrix(A,2);
+  arma::mat Q,R;
+  qr_econ(Q,R,A);
+  std::cout << "the R = " << R << std::endl;
+  LAARDD::SequentialQRTest(& matrix);
 }
