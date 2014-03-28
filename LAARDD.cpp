@@ -64,12 +64,6 @@ public:
     //
     result.R = R_seg;
     DiskShardedMatrix * Q = new DiskShardedMatrix(*matrix, false);
-<<<<<<< HEAD
-    
-=======
-    Q->SetSegment(matrix->NumSegments() - 1, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
-
->>>>>>> parent of 5806df2... Little fixes with ShardedMatrix interface, and better test for random matrices.
     // Reconstruct Q from the Q_i
     //
     arma::mat next_Q_seg;
@@ -104,10 +98,8 @@ uint LAARDD::s_counter = 0;
 
 int main()
 {
-  arma::mat A = arma::randu<arma::mat>(10,3);
-  InMemoryShardedMatrix matrix(A,2);
-  arma::mat Q,R;
-  qr_econ(Q,R,A);
-  std::cout << "the R = " << R << std::endl;
-  LAARDD::SequentialQRTest(& matrix);
+  if(LAARDD::SmallRandomTests(5,30))
+  {
+    std::cout << "SmallRandomTests Passed" << std::endl;
+  }
 }
