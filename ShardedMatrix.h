@@ -6,6 +6,7 @@
 #include <string>
 #include "assert.h"
 #include "LAARDD_Utils.h"
+#include <stdio.h>
 
 // A Matrix class which can create an in-memory matrix which represents one segment of the matrix.  
 //
@@ -14,13 +15,13 @@ class ShardedMatrix
 
 public:
   ShardedMatrix(uint num_cols) 
-    : m_numColumns(num_cols), m_numSegments(0) { }
+    : m_numColumns(num_cols) { }
 
   ShardedMatrix(uint num_cols, std::vector<uint> & segSizes) 
     : m_numColumns (num_cols), m_segmentRow(segSizes) { }
   
   ShardedMatrix(uint num_segs, uint num_cols, uint num_rows) 
-    : m_numColumns (num_cols), m_numSegments(num_segs) 
+    : m_numColumns (num_cols)
   {
     for (int i = 0; i < num_segs - 1; ++i)
     {
@@ -42,7 +43,7 @@ public:
 
   uint NumSegments()
   {
-    return m_numSegments;
+    return m_segmentRow.size();
   }
 
   uint SegmentNumRows(uint seg_num)
@@ -59,12 +60,10 @@ protected:
   
   void AddSegment(uint seg_size)
   {
-    ++m_numSegments;
     m_segmentRow.push_back(seg_size);
   }
   
   uint m_numColumns;
-  uint m_numSegments;
   std::vector<uint> m_segmentRow;
 
 };
@@ -117,6 +116,18 @@ public:
     m_unique_id = s_unique_id++;
   }
 
+  DiskShardedMatrix(DiskShardedMatrix & A) : ShardedMatrix(0, A.SegmentsNumRows())
+  {
+    assert(false); // DO NOT COPY-CONSTRUCT
+  }
+
+  ~DiskShardedMatrix()
+  {
+    for (int i = 0; i < NumSegments(); ++i)
+    {
+      assert(std::remove(("tmp/" + m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(i) + ".mat").c_str())==0);
+    }
+  }
 
   DiskShardedMatrix(uint num_columns, const char * filename) 
     : ShardedMatrix(num_columns), m_filename(filename)
@@ -126,7 +137,8 @@ public:
 
   bool WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
   {
-    return out.load(m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(seg_num) + ".mat");
+    return out.load("tmp/" + m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(seg_num) + ".mat");
+    out.eval();
   }
   
   void AddSegment(arma::Mat<double> seg)
@@ -140,7 +152,7 @@ public:
   {
     
     assert(seg.n_cols == NumColumns());
-    seg.eval().save(m_filename + "_" +  std::to_string(m_unique_id) + "_" + std::to_string(seg_num) + ".mat");
+    seg.eval().save("tmp/" + m_filename + "_" +  std::to_string(m_unique_id) + "_" + std::to_string(seg_num) + ".mat");
   }
     
 private:
