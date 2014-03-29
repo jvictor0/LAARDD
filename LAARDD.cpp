@@ -34,6 +34,24 @@ public:
   {
     ShardedMatrix * Q;
     arma::Mat<double> * R;
+    void Free()
+    {
+      delete Q;
+      delete R;
+    }
+  };
+
+  struct SVDTriplet
+  {
+    ShardedMatrix * U;
+    arma::vec * s;
+    arma::mat * V;
+    void Free()
+    {
+      delete U;
+      delete s;
+      delete V;
+    }
   };
   
   static QRPair SequentialQR(ShardedMatrix * matrix)
@@ -51,7 +69,12 @@ public:
     for (int i = 0; i < matrix->NumSegments(); ++i)
     {
       matrix->WriteMatrixSegment(i, A_seg);
-      CHECK(qr_econ(Q_seg, *R_seg, arma::join_vert(*R_seg, A_seg)), result);
+      if (!qr_econ(Q_seg, *R_seg, arma::join_vert(*R_seg, A_seg)))
+      {
+	delete Q_ids;
+	delete R_seg;
+	return result;
+      }
       assert(Q_seg.n_cols == matrix->NumColumns());
       if (i != matrix->NumSegments() - 1) // no need to store last Q_seg, will use immidiately
       {
@@ -79,7 +102,22 @@ public:
     
     Q->SetSegment(0, Q_seg); // last segment uses entire Q_seg matrix
     
+    delete [] Q_ids;
     result.Q = Q;
+    return result;
+  }
+  
+  static SVDTriplet SVDFromQR(QRPair QR)
+  {
+    SVDTriplet result;
+    assert(QR.R->n_cols == QR.R->n_rows);
+    result.s = new arma::vec(QR.R->n_cols);
+    result.V = new arma::mat(QR.R->n_cols,QR.R->n_cols);
+    arma::mat * U_tilde = new arma::mat();
+    svd(*U_tilde, *result.s, *result.V, *QR.R);
+    ShardedMatrixProduct * U = new ShardedMatrixProduct(QR.Q,U_tilde);
+    U->SetOwnsB(true);
+    result.U = U;
     return result;
   }
   
@@ -88,7 +126,6 @@ public:
 private:
 
   static StoredMatrixID GetNextMatrixID() { return s_counter++; }
-
   static uint s_counter;
 
 };

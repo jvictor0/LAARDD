@@ -5,7 +5,7 @@
 #include <vector> 
 #include <string>
 #include "assert.h"
-
+#include "LAARDD_Utils.h"
 
 // A Matrix class which can create an in-memory matrix which represents one segment of the matrix.  
 //
@@ -16,14 +16,8 @@ public:
   ShardedMatrix(uint num_cols) 
     : m_numColumns(num_cols), m_numSegments(0) { }
 
-  ShardedMatrix(uint num_segs, uint num_cols, uint * segSizes) 
-    : m_numColumns (num_cols), m_numSegments(num_segs)
-  {
-    for (int i = 0; i < num_segs; ++i)
-    {
-      m_segmentRow.push_back(segSizes[i]);
-    }
-  }
+  ShardedMatrix(uint num_cols, std::vector<uint> & segSizes) 
+    : m_numColumns (num_cols), m_segmentRow(segSizes) { }
   
   ShardedMatrix(uint num_segs, uint num_cols, uint num_rows) 
     : m_numColumns (num_cols), m_numSegments(num_segs) 
@@ -39,7 +33,7 @@ public:
 
   virtual ~ShardedMatrix() { } 
   
-  virtual void WriteMatrixSegment(uint seg_num, arma::Mat<double> & out) = 0;
+  virtual bool WriteMatrixSegment(uint seg_num, arma::Mat<double> & out) = 0;
 
   uint NumColumns()
   {
@@ -56,9 +50,9 @@ public:
     return m_segmentRow[seg_num];
   }
 
-  uint* SegmentsNumRows()
+  std::vector<uint> & SegmentsNumRows()
   {
-    return &m_segmentRow[0];
+    return m_segmentRow;
   }
   
 protected:
@@ -93,7 +87,7 @@ public:
     }
   }
   
-  void WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
+  bool WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
   {
     out.set_size(SegmentNumRows(seg_num), NumColumns());
     double* matrix_array = out.memptr();
@@ -101,9 +95,9 @@ public:
     {
       WriteColumnSegment(seg_num, i, matrix_array + i * SegmentNumRows(seg_num));
     }
+    return true;
   }
 
-  
   arma::Mat<double> m_matrix;
 };
 
@@ -117,7 +111,7 @@ public:
   }
 
   DiskShardedMatrix(ShardedMatrix & A, bool copy) 
-    : ShardedMatrix(A.NumSegments(), A.NumColumns(), A.SegmentsNumRows()), m_filename("disk_shard")
+    : ShardedMatrix(A.NumColumns(), A.SegmentsNumRows()), m_filename("disk_shard")
   { 
     assert(!copy);
     m_unique_id = s_unique_id++;
@@ -130,9 +124,9 @@ public:
     m_unique_id = s_unique_id++;
   }
 
-  void WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
+  bool WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
   {
-    out.load(m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(seg_num) + ".mat");
+    return out.load(m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(seg_num) + ".mat");
   }
   
   void AddSegment(arma::Mat<double> seg)
@@ -163,18 +157,52 @@ uint DiskShardedMatrix::s_unique_id =0;
 class ShardedMatrixProduct : public ShardedMatrix 
 {
 public: 
-  ShardedMatrixProduct(ShardedMatrix * A, arma::Mat<double> & B)
-    : ShardedMatrix(B.n_rows, A->NumSegments(), A->SegmentsNumRows()), m_A(A), m_B(B) { }
-
-  void WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
-  {
-    m_A->WriteMatrixSegment(seg_num,out);
-    out = out * m_B;
-  }
   
+  ShardedMatrixProduct(ShardedMatrix * A, arma::Mat<double> * B)
+    : ShardedMatrix(B->n_rows, A->SegmentsNumRows()), m_A(A), m_B(B), m_ownsA(false), m_ownsB(false) { }
+
+  ~ShardedMatrixProduct()
+  {
+    if (m_ownsA)
+    {
+      FreeA();
+    }
+    if (m_ownsB)
+    {
+      FreeB();
+    }
+  }
+
+  bool WriteMatrixSegment(uint seg_num, arma::Mat<double> & out)
+  {
+    CHECK(m_A->WriteMatrixSegment(seg_num,out),false);
+    out = out * (*m_B);
+    return true;
+  }
+
+  void SetOwnsA(bool b)
+  {
+    m_ownsA = b;
+  }
+  void SetOwnsB(bool b)
+  {
+    m_ownsB = b;
+  }
+
+  void FreeA()
+  {
+    delete m_A;
+  }
+  void FreeB()
+  {
+    delete m_B;
+  }
 
 private:
   ShardedMatrix * m_A;
-  arma::Mat<double> m_B;
+  arma::Mat<double> * m_B;
+  
+  bool m_ownsA;
+  bool m_ownsB;
 };
 
