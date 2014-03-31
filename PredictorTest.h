@@ -26,7 +26,7 @@ XYPair SimulateLM(uint s, uint p, uint b, double epsilon)
   DiskShardedMatrix *Y = new DiskShardedMatrix(1);
   arma::mat beta = arma::randn<arma::mat>(p,1);
   arma::mat XSeg;
-  for (int i = 0; i < b; ++i)
+  for (uint i = 0; i < b; ++i)
   {
     std::cout << "Simulating segment " << i << std::endl;
     XSeg = arma::randn<arma::mat>(s,p);

@@ -27,9 +27,10 @@ public:
   
   void Train(ShardedMatrix * X, ShardedMatrix * Y)
   {
-    LAARDD::QRPair QR = LAARDD::SequentialQR(X);
-    assert(QR.Q);
-    TrainFromQR(QR, Y);
+    arma::mat QtY;
+    LAARDD::QRPair QR = LAARDD::SequentialQR(X, Y, &QtY);
+    assert(QR.R);
+    arma::solve(m_beta_hat, arma::trimatu(*QR.R), QtY);
     std::cout << "beta_hat = " << m_beta_hat << std::endl;
     QR.Free();
   }
@@ -42,7 +43,7 @@ public:
   {
     arma::mat UtY = ShardedMatrix::InnerProduct(SVD.U,Y);
     arma::vec s_inv = arma::vec(s_inv.size(), arma::fill::zeros);
-    for (int i = 0; i < s_inv.size(); ++i)
+    for (uint i = 0; i < s_inv.size(); ++i)
     {
       if (std::abs((*SVD.s)(i)) <= arma::datum::eps)
       {
@@ -58,20 +59,25 @@ private:
 };
 
 // Simple class to make a datamatrix useable for linear model.
-// Probably could be more efficient for simple linear models, 
-// but should be efficient for complex models using each column multiple times.
+// This could be more efficient if it didn't have to materialize the whole intermidiate matrix,
+// but this way is easier to prototype with.
+// It could be trivial to code-gen ShardedMatrix instances that represent specific
+// basis expansions that only one column at a time, and each column exactly once.  
 //
 class BasisExpansionShardedMatrix : public ShardedMatrix
 {
+  BasisExpansionShardedMatrix() : ShardedMatrix(0) { }
+
   bool WriteMatrixSegment(uint seg_num, arma::mat & out)
   {
     arma::mat internal_matrix;
     CHECK(m_data_matrix->WriteMatrixSegment(seg_num, internal_matrix), false);
     out.set_size(internal_matrix.n_rows, NumColumns());
-    for (int i = 0; i < NumColumns(); ++i)
+    for (uint i = 0; i < NumColumns(); ++i)
     {
       m_basis_functions[i](internal_matrix, out.colptr(i));
     }
+    return true;
   }
 
   typedef std::function<void(const arma::mat & data_segment, double * out)>  ColumnFun;
@@ -80,14 +86,14 @@ class BasisExpansionShardedMatrix : public ShardedMatrix
   {
     return [c] (const arma::mat & data_segment, double * out)
     {
-      for (int i = 0; i < data_segment.n_rows; ++i)
+      for (uint i = 0; i < data_segment.n_rows; ++i)
       {
 	out[i] = c;
       }
     };
   }
 
-  static ColumnFun CopyColumn(int col_num)
+  static ColumnFun CopyColumn(uint col_num)
   {
     return [col_num] (const arma::mat & data_segment, double * out)
     {
@@ -95,15 +101,60 @@ class BasisExpansionShardedMatrix : public ShardedMatrix
     };
   }
 
-  static BasisExpansionShardedMatrix* WithIntercept(ShardedMatrix * data)
+  static ColumnFun MonomialColumn(std::vector<uint> & col_data)
   {
-    BasisExpansionShardedMatrix* result =  new BasisExpansionShardedMatrix(data->NumColumns() + 1);
-    result->m_basis_functions.push_back(ConstantColumn(1));
-    for (int i = 0; i < data->NumColumns(); ++i)
+    return [col_data] (const arma::mat & data_segment, double * out)
     {
-      result->m_basis_functions.push_back(CopyColumn(i));
+      for (uint i = 0; i < data_segment.n_rows; ++i)
+      {
+	out[i] = std::pow(data_segment[col_data[0]], data_segment[col_data[1]]);
+      }
+      for (uint j = 2; j < col_data.size(); j += 2)
+      {
+	for (uint i = 0; i < data_segment.n_rows; ++i)
+	{
+	  out[i] *= std::pow(data_segment[col_data[j]], data_segment[col_data[j+1]]);
+	}
+      }
+    };
+  }
+
+  void AddColumn(ColumnFun c)
+  {
+    m_basis_functions.push_back(c);
+    ShardedMatrix::AddColumn();
+  }
+
+  void AddIntercept()
+  {
+    AddColumn(ConstantColumn(1));
+  }
+  
+  void AddLinearBases()
+  {
+    for (uint i = 0; i < m_data_matrix->NumColumns(); ++i)
+    {
+      AddColumn(CopyColumn(i));
     }
-    result->m_data_matrix = data;
+  }
+  
+  void AddQuadradicBases()
+  {
+    for (uint i = 0; i < m_data_matrix->NumColumns(); ++i)
+    {
+      std::vector<uint> base;
+      base.push_back(i);
+      base.push_back(2);
+      AddColumn(MonomialColumn(base));
+      base[1] = 1;
+      base.push_back(i);
+      base.push_back(1);
+      for (uint j = i+1; j < m_data_matrix->NumColumns(); ++j)
+      {
+	base[2] = j;
+	AddColumn(MonomialColumn(base));
+      }
+    }
   }
 
   template<class Pred>
@@ -119,7 +170,7 @@ class BasisExpansionShardedMatrix : public ShardedMatrix
     {
       arma::mat basis;
       basis.set_size(x0.n_rows, m_data->NumColumns());
-      for (int i = 0; i < m_data->NumColumns(); ++i)
+      for (uint i = 0; i < m_data->NumColumns(); ++i)
       {
 	m_data->m_basis_functions[i](x0, basis.colptr(i));
       }
@@ -143,8 +194,6 @@ class BasisExpansionShardedMatrix : public ShardedMatrix
   }
 
 private:
-
-  BasisExpansionShardedMatrix(uint num_cols) : ShardedMatrix(num_cols) { }
 
   ShardedMatrix * m_data_matrix;
   std::vector<ColumnFun> m_basis_functions;

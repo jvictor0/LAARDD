@@ -23,7 +23,7 @@ public:
   ShardedMatrix(uint num_segs, uint num_cols, uint num_rows) 
     : m_numColumns (num_cols)
   {
-    for (int i = 0; i < num_segs - 1; ++i)
+    for (uint i = 0; i < num_segs - 1; ++i)
     {
       m_segmentRow.push_back(num_rows/num_segs);
     }
@@ -61,7 +61,7 @@ public:
     arma::mat result(A->NumColumns(), B->NumColumns(), arma::fill::zeros);
     assert(A->NumSegments() == B->NumSegments());
     arma::mat ASeg, BSeg;
-    for (int i = 0; i < A->NumSegments(); ++i)
+    for (uint i = 0; i < A->NumSegments(); ++i)
     {
       assert(A->SegmentNumRows(i) == B->SegmentNumRows(i));
       A->WriteMatrixSegment(i, ASeg);
@@ -77,7 +77,17 @@ protected:
   {
     m_segmentRow.push_back(seg_size);
   }
+
+  void AddColumns(uint num_columns)
+  {
+    m_numColumns += num_columns;
+  }
+  void AddColumn()
+  {
+    ++m_numColumns;
+  }
   
+
   uint m_numColumns;
   std::vector<uint> m_segmentRow;
 
@@ -95,7 +105,7 @@ public:
 
   void WriteColumnSegment(uint seg_num, uint col_num, double* out)
   {
-    for (int i = 0; i < SegmentNumRows(seg_num); ++i)
+    for (uint i = 0; i < SegmentNumRows(seg_num); ++i)
     {
       out[i] = m_matrix(seg_num * SegmentNumRows(0) + i ,col_num);
     }
@@ -105,7 +115,7 @@ public:
   {
     out.set_size(SegmentNumRows(seg_num), NumColumns());
     double* matrix_array = out.memptr();
-    for (int i = 0; i < NumColumns(); ++i)
+    for (uint i = 0; i < NumColumns(); ++i)
     {
       WriteColumnSegment(seg_num, i, matrix_array + i * SegmentNumRows(seg_num));
     }
@@ -138,7 +148,7 @@ public:
 
   ~DiskShardedMatrix()
   {
-    for (int i = 0; i < NumSegments(); ++i)
+    for (uint i = 0; i < NumSegments(); ++i)
     {
       assert(std::remove(("tmp/" + m_filename + "_" +  std::to_string(m_unique_id)  + "_" + std::to_string(i) + ".mat").c_str())==0);
     }

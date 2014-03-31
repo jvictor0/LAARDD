@@ -16,7 +16,7 @@ static bool SequentialQRAndSVDTest(ShardedMatrix * matrix)
   ShardedMatrixProduct USVt(svd.U, &UVt);
   double max_diff = 0;
   arma::mat ATemp, BTemp, CTemp;
-  for (int i = 0; i < matrix->NumSegments(); ++i)
+  for (uint i = 0; i < matrix->NumSegments(); ++i)
   {
     matrix->WriteMatrixSegment(i, ATemp);
     QR.WriteMatrixSegment(i, BTemp);
@@ -29,14 +29,13 @@ static bool SequentialQRAndSVDTest(ShardedMatrix * matrix)
   return max_diff < 0.00000000001;
 }
 
-static bool SmallRandomTests(int lowestN, int highestN)
+static bool SmallRandomTests(uint lowestN, uint highestN)
 {
-  int count = 0;
-  for (int n = lowestN; n < highestN; ++n)
+  for (uint n = lowestN; n < highestN; ++n)
   {
-    for (int p = 1; p < n; ++p)
+    for (uint p = 1; p < n; ++p)
     {
-      for (int b = 1; b <= n/p; ++b)
+      for (uint b = 1; b <= n/p; ++b)
       {
 	arma::mat A = arma::randu<arma::mat>(n,p);
 	InMemoryShardedMatrix matrix(A,b);

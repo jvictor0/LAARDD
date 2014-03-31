@@ -12,7 +12,7 @@ class LAARDD
 
 public: 
 
-  typedef uint StoredMatrixID;
+  typedef int StoredMatrixID;
 
   static StoredMatrixID Store(arma::Mat<double> & matrix)
   {
@@ -34,6 +34,11 @@ public:
 
   struct QRPair
   {
+    QRPair()
+    {
+      Q = NULL;
+      R = NULL;
+    }
     ShardedMatrix * Q;
     arma::Mat<double> * R;
     void Free()
@@ -56,19 +61,28 @@ public:
     }
   };
   
-  static QRPair SequentialQR(ShardedMatrix * matrix)
+  // Computes a QR factorization.
+  // If the second argument not provided, both Q and R are computed explicitly and linear disk space is used.
+  // If Y is provided, the Q part of the result is left NULL and Q^TY is computed into the third argument, 
+  // and NO additional disk space is used.
+  // 
+  static QRPair SequentialQR(ShardedMatrix * matrix, ShardedMatrix * Y = NULL, arma::mat * QtY = NULL)
   {
-    StoredMatrixID * Q_ids = new StoredMatrixID[matrix->NumSegments()];
-    arma::mat Q_seg, A_seg;
+    StoredMatrixID * Q_ids = Y ? NULL : new StoredMatrixID[matrix->NumSegments()];
+    arma::mat Q_seg, A_seg, Y_seg;
     arma::mat * R_seg = new arma::mat(0, matrix->NumColumns());
     
     QRPair result;
-    result.Q = NULL;
-    result.R = NULL;
+    
+    if (Y)
+    {
+      assert(QtY);
+      *QtY = arma::zeros(matrix->NumColumns(), Y->NumColumns());
+    }
     
     // factor [R_{i-1}; A_i], store the Q_i factors for later
     //
-    for (int i = 0; i < matrix->NumSegments(); ++i)
+    for (uint i = 0; i < matrix->NumSegments(); ++i)
     {
       std::cout << "Calculating Q,R_" << i << std::endl;
       matrix->WriteMatrixSegment(i, A_seg);
@@ -79,7 +93,17 @@ public:
 	return result;
       }
       assert(Q_seg.n_cols == matrix->NumColumns());
-      if (i != matrix->NumSegments() - 1) // no need to store last Q_seg, will use immidiately
+      
+      if (Y)
+      {
+	if (i > 0)
+	{
+	  *QtY = Q_seg.rows(0,Q_seg.n_cols - 1).t() * (*QtY);
+	}
+	Y->WriteMatrixSegment(i, Y_seg);
+	*QtY = (*QtY) + Q_seg.rows(Q_seg.n_rows - Y_seg.n_rows,Q_seg.n_rows - 1).t() * Y_seg;
+      }
+      else if (i != matrix->NumSegments() - 1) // no need to store last Q_seg, will use immidiately
       {
 	Q_ids[i] = Store(Q_seg);
 	assert(Q_ids[i] != -1);
@@ -89,12 +113,16 @@ public:
     // R_{s-1} is now the final R result of the QR factorization.
     //
     result.R = R_seg;
+    if (Y)
+    {
+      return result;
+    }
     DiskShardedMatrix * Q = new DiskShardedMatrix(*matrix, false);
 
     // Reconstruct Q from the Q_i
     //
     arma::mat next_Q_seg;
-    for (int i = matrix->NumSegments() - 1; i >= 1; --i)
+    for (uint i = matrix->NumSegments() - 1; i >= 1; --i)
     {
       std::cout << "Calculating Q segment " << i << std::endl;
       Q->SetSegment(i, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
@@ -124,7 +152,6 @@ public:
     result.U = U;
     return result;
   }
-  
   
 private:
 
