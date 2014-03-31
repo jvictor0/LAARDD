@@ -53,3 +53,24 @@ bool TestLinearRegression(uint s, uint p, uint b, double epsilon)
   XY.Free();
   return true;
 }
+
+
+bool TestRidgeRegression(uint s, uint p, uint b, double epsilon, double lambda_min, double lambda_max, uint num_lambdas)
+{
+  XYPair XY = SimulateLM(s, p, b, epsilon);
+  arma::vec lambdas(num_lambdas);
+  for (uint i = 0; i < num_lambdas; ++i)
+  {
+    lambdas(i) = lambda_min + i * (lambda_max - lambda_min) / (num_lambdas-1);
+  }
+  std::vector<RidgeRegression> path;
+  RidgeRegression::Path(XY.XTrain ,XY.YTrain, lambdas, path);
+  for (uint i = 0; i < num_lambdas; ++i)
+  {
+    arma::mat YHat = path[i].Predict(XY.XTest);
+    double rms = arma::sum(arma::sum(arma::square(XY.YTest-YHat)))/s;
+    std::cout << "lambda = " << lambdas(i) << ", rms = " << rms << std::endl;
+  }
+  XY.Free();
+  return true;
+}
