@@ -55,6 +55,21 @@ public:
   {
     return m_segmentRow;
   }
+
+  static arma::mat InnerProduct(ShardedMatrix * A, ShardedMatrix * B)
+  {
+    arma::mat result(A->NumColumns(), B->NumColumns(), arma::fill::zeros);
+    assert(A->NumSegments() == B->NumSegments());
+    arma::mat ASeg, BSeg;
+    for (int i = 0; i < A->NumSegments(); ++i)
+    {
+      assert(A->SegmentNumRows(i) == B->SegmentNumRows(i));
+      A->WriteMatrixSegment(i, ASeg);
+      B->WriteMatrixSegment(i, BSeg);
+      result = result + ASeg.t() * BSeg;
+    }
+    return result;
+  }
   
 protected:
   

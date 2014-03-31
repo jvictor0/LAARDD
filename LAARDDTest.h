@@ -1,7 +1,16 @@
+#pragma once
+
+#include "ShardedMatrix.h"
+#include <armadillo>
+#include "assert.h"
+#include <stdio.h>
+
+#include "LAARDD_Utils.h"
+
 static bool SequentialQRAndSVDTest(ShardedMatrix * matrix)
 {
-  QRPair QandR = SequentialQR(matrix);
-  SVDTriplet svd = SVDFromQR(QandR);
+  LAARDD::QRPair QandR = LAARDD::SequentialQR(matrix);
+  LAARDD::SVDTriplet svd = LAARDD::SVDFromQR(QandR);
   ShardedMatrixProduct QR(QandR.Q, QandR.R);
   arma::mat UVt = arma::diagmat(*svd.s) * svd.V->t();
   ShardedMatrixProduct USVt(svd.U, &UVt);
@@ -31,7 +40,7 @@ static bool SmallRandomTests(int lowestN, int highestN)
       {
 	arma::mat A = arma::randu<arma::mat>(n,p);
 	InMemoryShardedMatrix matrix(A,b);
-	if (!LAARDD::SequentialQRAndSVDTest(& matrix))
+	if (!SequentialQRAndSVDTest(& matrix))
 	{
 	  std::cout << "FAILED n = " << n << " p = " << p << " b = " << b << std::endl;
 	  return false;
@@ -63,7 +72,7 @@ static bool SmallRandomLowRankTests(int lowestN, int highestN)
 	  }
 	  A = U * arma::diagmat(s) * V.t();
 	  InMemoryShardedMatrix matrix(A,b);
-	  if (!LAARDD::SequentialQRAndSVDTest(& matrix))
+	  if (!SequentialQRAndSVDTest(& matrix))
 	  {
 	    std::cout << "FAILED n = " << n << " p = " << p << " b = " << b << std::endl;
 	    return false;
@@ -73,4 +82,16 @@ static bool SmallRandomLowRankTests(int lowestN, int highestN)
     }
   }
   return true;
+}
+
+void LAARDDTest()
+{
+  if(SmallRandomTests(5,30))
+  {
+    std::cout << "SmallRandomTests Passed" << std::endl;
+  }
+  if(SmallRandomLowRankTests(5,30))
+  {
+    std::cout << "SmallRandomLowRankTests Passed" << std::endl;
+  }
 }

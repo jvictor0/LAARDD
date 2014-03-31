@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ShardedMatrix.h"
 #include <armadillo>
 #include "assert.h"
@@ -68,6 +70,7 @@ public:
     //
     for (int i = 0; i < matrix->NumSegments(); ++i)
     {
+      std::cout << "Calculating Q,R_" << i << std::endl;
       matrix->WriteMatrixSegment(i, A_seg);
       if (!qr_econ(Q_seg, *R_seg, arma::join_vert(*R_seg, A_seg)))
       {
@@ -93,6 +96,7 @@ public:
     arma::mat next_Q_seg;
     for (int i = matrix->NumSegments() - 1; i >= 1; --i)
     {
+      std::cout << "Calculating Q segment " << i << std::endl;
       Q->SetSegment(i, Q_seg.rows(matrix->NumColumns(), Q_seg.n_rows - 1));
       bool ret_worked = Retrieve(Q_ids[i-1],next_Q_seg);
       assert(ret_worked);
@@ -112,7 +116,7 @@ public:
     SVDTriplet result;
     assert(QR.R->n_cols == QR.R->n_rows);
     result.s = new arma::vec(QR.R->n_cols);
-    result.V = new arma::mat(QR.R->n_cols,QR.R->n_cols);
+    result.V = new arma::mat(QR.R->n_cols, QR.R->n_cols);
     arma::mat * U_tilde = new arma::mat();
     svd(*U_tilde, *result.s, *result.V, *QR.R);
     ShardedMatrixProduct * U = new ShardedMatrixProduct(QR.Q,U_tilde);
@@ -121,7 +125,6 @@ public:
     return result;
   }
   
-#include "LAARDDTest.cpp"
   
 private:
 
@@ -133,14 +136,3 @@ private:
 
 uint LAARDD::s_counter = 0;
 
-int main()
-{
-  if(LAARDD::SmallRandomTests(5,30))
-  {
-    std::cout << "SmallRandomTests Passed" << std::endl;
-  }
-  if(LAARDD::SmallRandomLowRankTests(5,30))
-  {
-    std::cout << "SmallRandomLowRankTests Passed" << std::endl;
-  }
-}
