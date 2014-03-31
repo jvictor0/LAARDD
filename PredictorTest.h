@@ -5,7 +5,7 @@
 #include "LAARDD_Utils.h"
 #include "LAARDD.h"
 #include "Predictor.h"
-
+#include "BasisExpansion.h"
 
 struct XYPair
 {
@@ -118,8 +118,8 @@ bool TestNaturalSplineRegression(uint s, uint b, double epsilon, uint num_knots_
   BasisExpansionShardedMatrix spline_model = BasisExpansionShardedMatrix(XY.XTrain);
   spline_model.AddIntercept();
   spline_model.AddNaturalCubicSpline(0, 0, 2.0* num_knots_gen, num_knots_train);
-  BasisExpansionShardedMatrix::Transformed<LinearRegression> * lm = BasisExpansionShardedMatrix::TransformModel<LinearRegression>(&spline_model, XY.YTrain);
-  arma::mat YHat = lm->Predict(XY.XTest);
+  Transformed<LinearRegression> lm = Transformed<LinearRegression>(&spline_model, XY.YTrain);
+  arma::mat YHat = lm.Predict(XY.XTest);
   double rms = arma::sum(arma::sum(arma::square(XY.YTest-YHat)))/s;
   std::cout << "rms = " << rms << std::endl;
   XY.Free();
